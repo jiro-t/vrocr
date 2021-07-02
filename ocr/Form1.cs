@@ -5,12 +5,17 @@ using System.Threading.Tasks;
 using Windows.Foundation;
 using Windows.Globalization;
 using Windows.Media.Ocr;
+using System.Linq;
 
 namespace ocr
 {
     public partial class Form1 : Form
     {
         Windows.Media.Ocr.OcrEngine ocr_engine = OcrEngine.TryCreateFromLanguage(new Language("ja"));
+        System.IO.MemoryStream ms = new System.IO.MemoryStream();
+        System.Drawing.Bitmap capBmp = new System.Drawing.Bitmap(400, 200);
+
+        string translateText = "";
 
         public Form1()
         {
@@ -37,6 +42,13 @@ namespace ocr
             return bitmap;
         }
 
+        private async Task<Windows.Graphics.Imaging.SoftwareBitmap> LoadImage(System.IO.MemoryStream s)
+        {
+            var stream = await ConvertToRandomAccessStream(s);
+            var bitmap = await LoadImage(stream);
+            return bitmap;
+        }
+
         private async Task<Windows.Graphics.Imaging.SoftwareBitmap> LoadImage(string path)
         {
             var fs = System.IO.File.OpenRead(path);
@@ -52,22 +64,22 @@ namespace ocr
 
         private async void loadBMP()
         {
-            var bmp = await LoadImage("tmp.bmp");
+            var bmp = await LoadImage(ms);
             var result = await ocr_engine.RecognizeAsync(bmp);
+            translateText = result.Text;
             System.Windows.Forms.MessageBox.Show(result.Text);
+            bmp = null;
         }
 
         private void takeScreenshot()
         {
-            // プライマリスクリーン全体
-            System.Drawing.Bitmap bmp = new System.Drawing.Bitmap(400,200);
-            System.Drawing.Graphics graphics = System.Drawing.Graphics.FromImage(bmp);
-            // 画面全体をコピーする
-            graphics.CopyFromScreen(new System.Drawing.Point(750, 300), new System.Drawing.Point(0, 0), bmp.Size);
+            System.Drawing.Graphics graphics = System.Drawing.Graphics.FromImage(capBmp);
+            graphics.CopyFromScreen(new System.Drawing.Point(750, 300), new System.Drawing.Point(0, 0), capBmp.Size);
             graphics.Dispose();
 
-            pictureBox1.Image = bmp;
-            bmp.Save("tmp.bmp");
+            capBmp.Save(ms, System.Drawing.Imaging.ImageFormat.Bmp);
+
+            pictureBox1.Image = capBmp;
         }
 
         private void button1_Click(object sender, EventArgs e)
@@ -78,6 +90,39 @@ namespace ocr
         private void button2_Click(object sender, EventArgs e)
         {
             takeScreenshot();
+        }
+
+        private async void button3_Click(object sender, EventArgs e)
+        {
+            translateText = translateText.Replace(" ", "");
+            System.Net.Http.HttpClient client = new System.Net.Http.HttpClient();
+            string text = await client.GetStringAsync("http://translate.weblio.jp/?lp=EJ&lpf=EJ&originalText="+translateText);
+            int i = text.IndexOf("class=transExpB>");
+            if(i >= 0)
+            {
+                text = text.Remove(0, i+16);
+                int j = text.IndexOf("</div>");
+                if (j > 0)
+                {
+                    //translated text
+                    text = text.Remove(j, text.Count() - j);
+
+                    //<li></li> -> CRLF
+                    text = text.Replace("<ul>", "");
+                    text = text.Replace("</ul>", "");
+                    text = text.Replace("<li>", "");
+                    text = text.Replace("</li>", "\r\n");
+                }
+            }
+
+            System.Drawing.Graphics graphics = System.Drawing.Graphics.FromImage(capBmp);
+            System.Drawing.Font font = new System.Drawing.Font("MS UI Gothic", 20);
+            graphics.DrawString(text,font, System.Drawing.Brushes.Red,50,10);
+            font.Dispose();
+            graphics.Dispose();
+            pictureBox1.Image = capBmp;
+
+            capBmp.Save("tmp.bmp");
         }
     }
 }
