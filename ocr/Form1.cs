@@ -94,7 +94,6 @@ namespace ocr
 
         private async void button3_Click(object sender, EventArgs e)
         {
-            translateText = translateText.Replace(" ", "");
             System.Net.Http.HttpClient client = new System.Net.Http.HttpClient();
             string text = await client.GetStringAsync("http://translate.weblio.jp/?lp=EJ&lpf=EJ&originalText="+translateText);
             int i = text.IndexOf("class=transExpB>");
@@ -112,6 +111,20 @@ namespace ocr
                     text = text.Replace("</ul>", "");
                     text = text.Replace("<li>", "");
                     text = text.Replace("</li>", "\r\n");
+                }
+            }
+            else
+            {
+                i = text.IndexOf("class=translatedTextAreaLn");
+                if (i > 0)
+                {
+                    text = text.Remove(0, i + 33);
+                    int j = text.IndexOf("</span>");
+                    if (j > 0)
+                    {
+                        //translated text
+                        text = text.Remove(j, text.Count() - j);
+                    }
                 }
             }
 
